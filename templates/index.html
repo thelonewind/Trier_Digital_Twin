@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trier Digital Twin — Live Intelligence Platform</title>
+
+  <!-- CesiumJS -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="/static/style.css" />
+
+  <!-- Cesium token injected by Flask (never hardcoded in JS) -->
+  <script>
+    window.CESIUM_TOKEN = "{{ cesium_token }}";
+    window.API_BASE = "";  // same origin — Flask serves everything
+  </script>
+</head>
+<body>
+
+<div id="cesiumContainer"></div>
+
+<!-- TOP BAR -->
+<div id="topBar">
+  <div class="brand">
+    <div>
+      <h1>TRIER DIGITAL TWIN</h1>
+      <span>LIVE INTELLIGENCE PLATFORM</span>
+    </div>
+  </div>
+  <div class="nav-items">
+    <button class="nav-btn active" onclick="setView('map',event)">3D Map</button>
+    <button class="nav-btn" onclick="setView('historic',event)">Historic</button>
+    <button class="nav-btn" onclick="setView('analytics',event)">Analytics</button>
+    <button class="nav-btn" onclick="setView('buildings',event)">Buildings</button>
+    <button class="nav-btn" onclick="setView('demographics',event)">Demographics</button>
+  </div>
+  <div class="live-badge">
+    <div class="pulse-dot"></div>
+    <span id="apiStatusText">CONNECTING…</span>
+  </div>
+  <div id="clockDisplay">--:--:-- CET</div>
+</div>
+
+<!-- LEFT PANEL: Layers + controls -->
+<div id="leftPanel">
+  <div class="panel-section">
+    <h3>Map Layers</h3>
+    <div class="layer-row" onclick="toggleLayer('fort')">
+      <div class="ldot" style="background:#c0504a"></div>
+      <span class="lname">Roman Fort</span>
+      <div class="ltog on" id="tog-fort"></div>
+    </div>
+    <div class="layer-row" onclick="toggleLayer('historic')">
+      <div class="ldot" style="background:#d4b483"></div>
+      <span class="lname">Historic Sites</span>
+      <div class="ltog on" id="tog-historic"></div>
+    </div>
+    <div class="layer-row" onclick="toggleLayer('housing')">
+      <div class="ldot" style="background:#4a7fb5"></div>
+      <span class="lname">Housing</span>
+      <div class="ltog on" id="tog-housing"></div>
+    </div>
+    <div class="layer-row" onclick="toggleLayer('roads')">
+      <div class="ldot" style="background:#5a9e6f"></div>
+      <span class="lname">Road Network</span>
+      <div class="ltog on" id="tog-roads"></div>
+    </div>
+    <div class="layer-row" onclick="toggleLayer('buildings')">
+      <div class="ldot" style="background:#b87333"></div>
+      <span class="lname">3D Buildings</span>
+      <div class="ltog on" id="tog-buildings"></div>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>Time Period</h3>
+    <div class="time-btns">
+      <button class="time-btn" id="btn-roman" onclick="setEra('roman')">Roman</button>
+      <button class="time-btn active" id="btn-modern" onclick="setEra('modern')">Modern</button>
+    </div>
+    <input type="range" id="eraSlider" min="100" max="2024" value="2024"
+           oninput="updateEraSlider(this.value)" />
+    <div id="eraLabel">Present Day (2024)</div>
+  </div>
+
+  <div class="panel-section">
+    <h3>Basemap</h3>
+    <div class="layer-row" onclick="setBasemap('satellite')">
+      <div class="ldot" style="background:#4a7fb5"></div>
+      <span class="lname">Satellite</span>
+    </div>
+    <div class="layer-row" onclick="setBasemap('terrain')">
+      <div class="ldot" style="background:#5a9e6f"></div>
+      <span class="lname">Terrain</span>
+    </div>
+    <div class="layer-row" onclick="setBasemap('dark')">
+      <div class="ldot" style="background:#333"></div>
+      <span class="lname">Dark</span>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>Fly To</h3>
+    <div class="layer-row" onclick="flyTo(6.6432,49.7576,400,'Porta Nigra')">
+      <span class="lname">Porta Nigra</span>
+    </div>
+    <div class="layer-row" onclick="flyTo(6.6451,49.7561,400,'Cathedral')">
+      <span class="lname">Cathedral</span>
+    </div>
+    <div class="layer-row" onclick="flyTo(6.6518,49.7500,400,'Amphitheatre')">
+      <span class="lname">Amphitheatre</span>
+    </div>
+    <div class="layer-row" onclick="flyTo(6.6456,49.7546,400,'Basilica')">
+      <span class="lname">Basilica of Constantine</span>
+    </div>
+    <div class="layer-row" onclick="flyTo(6.6441,49.7596,2500,'Overview')">
+      <span class="lname">City Overview</span>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h3>API Status</h3>
+    <div class="api-pills">
+      <div class="api-pill loading" id="pill-weather">Weather</div>
+      <div class="api-pill loading" id="pill-traffic">Traffic</div>
+      <div class="api-pill loading" id="pill-buildings">Buildings</div>
+      <div class="api-pill loading" id="pill-db">Database</div>
+    </div>
+  </div>
+</div>
+
+<!-- LEFT TOGGLE -->
+<div id="toggleLeft" class="panel-toggle" onclick="toggleLeftPanel()">◀</div>
+
+<!-- RIGHT PANEL: Live data dashboard -->
+<div id="rightPanel">
+
+  <!-- Weather Section -->
+  <div class="dash-section" id="section-weather">
+    <h3>☁ Weather — Trier</h3>
+    <div id="weatherGrid">
+      <div class="w-card wide" id="w-main-card">
+        <div class="skeleton" style="height:60px"></div>
+      </div>
+      <div class="w-card">
+        <div class="wval" id="w-temp">--</div>
+        <div class="wlabel">Temperature</div>
+      </div>
+      <div class="w-card">
+        <div class="wval" id="w-feels">--</div>
+        <div class="wlabel">Feels Like</div>
+      </div>
+      <div class="w-card">
+        <div class="wval" id="w-humidity">--%</div>
+        <div class="wlabel">Humidity</div>
+      </div>
+      <div class="w-card">
+        <div class="wval" id="w-wind">-- <span style="font-size:0.7rem">km/h</span></div>
+        <div class="wlabel">Wind <span id="w-dir"></span></div>
+      </div>
+      <div class="w-card">
+        <div class="wval" id="w-pressure">--</div>
+        <div class="wlabel">hPa</div>
+      </div>
+      <div class="w-card">
+        <div class="wval" id="w-vis">--</div>
+        <div class="wlabel">Vis km</div>
+      </div>
+    </div>
+    <div id="forecastStrip"></div>
+    <div style="font-size:0.6rem;color:var(--muted);margin-top:6px" id="w-updated">Loading…</div>
+  </div>
+
+  <!-- Traffic Section -->
+  <div class="dash-section" id="section-traffic">
+    <h3>🚦 Traffic — Live</h3>
+    <div class="traffic-bar">
+      <div class="traffic-needle" id="trafficNeedle" style="left:30%"></div>
+    </div>
+    <div class="traffic-labels"><span>Free</span><span>Moderate</span><span>Heavy</span></div>
+    <div class="stat-row" style="margin-top:10px">
+      <span class="stat-label">Status</span>
+      <span class="stat-val" id="traffic-status">Loading…</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">B51 / B53</span>
+      <span class="stat-val" id="t-main">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">City Centre</span>
+      <span class="stat-val" id="t-centre">--</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">A602</span>
+      <span class="stat-val" id="t-auto">--</span>
+    </div>
+    <div style="margin-top:10px;font-size:0.65rem;color:var(--muted)">Incidents</div>
+    <div id="incidentList"><div class="skeleton"></div></div>
+  </div>
+
+  <!-- Historic Sites Section -->
+  <div class="dash-section" id="section-historic">
+    <h3>🏛 Historic Sites</h3>
+    <div id="historicList"><div class="skeleton"></div><div class="skeleton" style="margin-top:6px"></div></div>
+  </div>
+
+  <!-- Analytics Section -->
+  <div class="dash-section" id="section-analytics">
+    <h3>📊 Tourism (Million visitors)</h3>
+    <div class="chart-wrap"><canvas id="tourismChart"></canvas></div>
+  </div>
+
+  <div class="dash-section">
+    <h3>🏠 Real Estate (€/m²)</h3>
+    <div class="chart-wrap"><canvas id="realEstateChart"></canvas></div>
+  </div>
+
+  <div class="dash-section">
+    <h3>⚡ Energy Prices (ct/kWh)</h3>
+    <div class="chart-wrap"><canvas id="energyChart"></canvas></div>
+  </div>
+
+  <div class="dash-section">
+    <h3>👥 Population History</h3>
+    <div class="chart-wrap tall"><canvas id="populationChart"></canvas></div>
+  </div>
+
+  <!-- Demographics -->
+  <div class="dash-section" id="section-demographics">
+    <h3>📋 Demographics</h3>
+    <div id="demographicsTable"><div class="skeleton"></div></div>
+  </div>
+
+  <!-- Rental Prices -->
+  <div class="dash-section">
+    <h3>🏘 Rental by District (€/m²)</h3>
+    <div id="rentalTable"><div class="skeleton"></div></div>
+  </div>
+
+</div>
+
+<!-- RIGHT TOGGLE -->
+<div id="toggleRight" class="panel-toggle" onclick="toggleRightPanel()">▶</div>
+
+<!-- BOTTOM BAR -->
+<div id="bottomBar">
+  <span class="coord" id="coordDisplay">Lat: 49.7596 · Lon: 6.6441</span>
+  <span class="sep">|</span>
+  <span id="altDisplay">Alt: 2500m</span>
+  <span class="sep">|</span>
+  <span id="eraBottomLabel">Present Day</span>
+  <span class="sep">|</span>
+  <span id="featureCount">Features: loading…</span>
+</div>
+
+<!-- INFO POPUP (click on map feature) -->
+<div id="infoPopup">
+  <span class="popup-close" onclick="document.getElementById('infoPopup').style.display='none'">✕ close</span>
+  <h3 id="popupTitle">Feature</h3>
+  <table id="popupTable"></table>
+  <div id="popupHistoric" style="display:none;margin-top:10px;font-size:0.72rem;color:var(--text);line-height:1.5"></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- App logic -->
+<script src="/static/app.js"></script>
+
+</body>
+</html>
